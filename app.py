@@ -1,54 +1,104 @@
-import streamlit as st
-import cv2
-from streamlit_webrtc import VideoTransformerBase,webrtc_streamer
-from keras.preprocessing.image import load_img
 import numpy as np
+import cv2
+import streamlit as st
+from tensorflow import keras
+from keras.models import model_from_json
+from keras.preprocessing.image import img_to_array
 from keras.models import load_model
-##from tensorflow.keras.utils import img_to_array
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration, VideoProcessorBase, WebRtcMode
 
-
-st.title("Face Emotion Detection")
-faceCascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
-
+# load model
+emotion_dict = {0:'angry', 1 :'happy', 2: 'neutral', 3:'sad', 4: 'surprise'}
+# load json and create model
+json_file = open('emotion_model1.json', 'r')
+loaded_model_json = json_file.read()
+json_file.close()
 classifier =load_model('Final_model.h5')  #Load model
+# load weights into new model
 
+#load face
+try:
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+except Exception:
+    st.write("Error loading cascade classifiers")
 
-class VideoTransformer(VideoTransformerBase):
-    def __init__(self):
-        self.i = 0
+RTC_CONFIGURATION = RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]})
 
+class Faceemotion(VideoTransformerBase):
     def transform(self, frame):
         img = frame.to_ndarray(format="bgr24")
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = faceCascade.detectMultiScale(gray)
-        emotion_list = [ 'angry' , 'disgust' , 'fear' , 'happy' , 'neutral' , 'sad' , 'surprise']
-        
-        
 
-        i =self.i+1
+        #image gray
+        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(
+            image=img_gray, scaleFactor=1.3, minNeighbors=5)
         for (x, y, w, h) in faces:
-            image = img[y:y+h, x:x+w]
-                      
-            cv2.rectangle(img, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            cv2.rectangle(img, (x, y - 40), (x + w, y), (95, 207, 30), -1)
-            # cv2.putText(img, '{}'.format(emotion_list[predicted_value]), (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-            cv2.rectangle(frame,(x,y),(x+w,y+h),(0,255,255),2)
-            roi_gray = gray[y:y+h,x:x+w]
-            roi_gray = cv2.resize(roi_gray,(48,48),interpolation=cv2.INTER_AREA)  ##Face Cropping for prediction
-
-
-
-            if np.sum([roi_gray])!=0:
-                roi = roi_gray.astype('float')/255.0
+            cv2.rectangle(img=img, pt1=(x, y), pt2=(
+                x + w, y + h), color=(255, 0, 0), thickness=2)
+            roi_gray = img_gray[y:y + h, x:x + w]
+            roi_gray = cv2.resize(roi_gray, (48, 48), interpolation=cv2.INTER_AREA)
+            if np.sum([roi_gray]) != 0:
+                roi = roi_gray.astype('float') / 255.0
                 roi = img_to_array(roi)
-                roi = np.expand_dims(roi,axis=0) ## reshaping the cropped face image for prediction
+                roi = np.expand_dims(roi, axis=0)
+                prediction = classifier.predict(roi)[0]
+                maxindex = int(np.argmax(prediction))
+                finalout = emotion_dict[maxindex]
+                output = str(finalout)
+            label_position = (x, y)
+            cv2.putText(img, output, label_position, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
-                prediction = classifier.predict(roi)[0]   #Prediction
-                label=emotion_list[prediction.argmax()]
-                label_position = (x,y)
-                cv2.putText(frame,label,label_position,cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)   # Text Adding
-            else:
-                cv2.putText(frame,'No Faces',(30,80),cv2.FONT_HERSHEY_SIMPLEX,1,(0,255,0),2)
-        return frame
+        return img
 
-webrtc_streamer(key="example", video_processor_factory=VideoTransformer)
+def main():
+    # Face Analysis Application #
+    st.title("Real Time Face Emotion Detection Application")
+    activiteis = ["Home", "Webcam Face Detection", "About"]
+    choice = st.sidebar.selectbox("Select Activity", activiteis)
+    st.sidebar.markdown(
+        """ Developed by Mohammad Juned Khan    
+            Email : Mohammad.juned.z.khan@gmail.com  
+            [LinkedIn] (https://www.linkedin.com/in/md-juned-khan)""")
+    if choice == "Home":
+        html_temp_home1 = """<div style="background-color:#6D7B8D;padding:10px">
+                                            <h4 style="color:white;text-align:center;">
+                                            Face Emotion detection application using OpenCV, Custom CNN model and Streamlit.</h4>
+                                            </div>
+                                            </br>"""
+        st.markdown(html_temp_home1, unsafe_allow_html=True)
+        st.write("""
+                 The application has two functionalities.
+                 1. Real time face detection using web cam feed.
+                 2. Real time face emotion recognization.
+                 """)
+    elif choice == "Webcam Face Detection":
+        st.header("Webcam Live Feed")
+        st.write("Click on start to use webcam and detect your face emotion")
+        webrtc_streamer(key="example", mode=WebRtcMode.SENDRECV, rtc_configuration=RTC_CONFIGURATION,
+                        video_processor_factory=Faceemotion)
+
+    elif choice == "About":
+        st.subheader("About this app")
+        html_temp_about1= """<div style="background-color:#6D7B8D;padding:10px">
+                                    <h4 style="color:white;text-align:center;">
+                                    Real time face emotion detection application using OpenCV, Custom Trained CNN model and Streamlit.</h4>
+                                    </div>
+                                    </br>"""
+        st.markdown(html_temp_about1, unsafe_allow_html=True)
+
+        html_temp4 = """
+                             		<div style="background-color:#98AFC7;padding:10px">
+                             		<h4 style="color:white;text-align:center;">This Application is developed by Mohammad Juned Khan using Streamlit Framework, Opencv, Tensorflow and Keras library for demonstration purpose. If you're on LinkedIn and want to connect, just click on the link in sidebar and shoot me a request. If you have any suggestion or wnat to comment just write a mail at Mohammad.juned.z.khan@gmail.com. </h4>
+                             		<h4 style="color:white;text-align:center;">Thanks for Visiting</h4>
+                             		</div>
+                             		<br></br>
+                             		<br></br>"""
+
+        st.markdown(html_temp4, unsafe_allow_html=True)
+
+    else:
+        pass
+
+
+if __name__ == "__main__":
+    main()
