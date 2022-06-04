@@ -4,7 +4,7 @@ from streamlit_webrtc import VideoTransformerBase,webrtc_streamer
 from keras.preprocessing.image import load_img
 import numpy as np
 from keras.models import load_model
-from tensorflow.keras.utils import img_to_array
+##from tensorflow.keras.utils import img_to_array
 
 
 st.title("Face Emotion Detection")
